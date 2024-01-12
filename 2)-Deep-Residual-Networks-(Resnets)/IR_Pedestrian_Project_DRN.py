@@ -6,15 +6,13 @@ Created on Fri Nov 24 15:00:10 2023
 """
 # %%
 
-import torch
+import torch 
 import torch.nn as nn
-import torch.nn.functional as F
 from PIL import Image
 import matplotlib.pyplot as plt
 import numpy as np
-import os
-from tqdm import tqdm
-import time
+import os 
+import torch.utils.data
 
 # %%
 # Device configuration
@@ -66,12 +64,12 @@ train_negative_array = read_images(train_negative_path, num_train_negative_img)
 # %%
 # Torch'da tensorlar kullanılıyor
 # Convert tensor
-x_train_negative_tensor = torch.from_numpy(train_negative_array)
+x_train_negative_tensor = torch.from_numpy(train_negative_array[:42000,:])
 print("x_train_negative_tensor:", x_train_negative_tensor.size())
 
 # %%
 
-y_train_negative_tensor = torch.zeros(num_train_negative_img, dtype=torch.long)
+y_train_negative_tensor = torch.zeros(42000, dtype=torch.long)
 print("y_train_negative_tensor:", y_train_negative_tensor.size())
 
 # %%
@@ -83,10 +81,10 @@ train_positive_array = read_images(train_positive_path, num_train_positive_img)
 
 # %%
 # Convert tensor
-x_train_positive_tensor = torch.from_numpy(train_positive_array)
+x_train_positive_tensor = torch.from_numpy(train_positive_array[:10000,:])
 print("x_train_positive_tensor:", x_train_positive_tensor.size())
 
-y_train_positive_tensor = torch.ones(num_train_positive_img, dtype=torch.long)
+y_train_positive_tensor = torch.ones(10000, dtype=torch.long)
 print("y_train_positive_tensor:", y_train_positive_tensor.size())
 
 # %%
@@ -105,9 +103,9 @@ print("y_train: ", y_train.size())
 test_negative_path = r"C:/Users/yusuf/Desktop/DeepLearning-Course-5.1/Datasets/LSIFar/LSIFIR/Classification/Test/neg"
 num_test_negative_img = 22050
 test_negative_array = read_images(test_negative_path, num_test_negative_img)
-x_test_negative_tensor = torch.from_numpy(test_negative_array[:20855, :])
+x_test_negative_tensor = torch.from_numpy(test_negative_array[:18056, :])
 print("x_test_negative_tensor: ", x_test_negative_tensor.size())
-y_test_negative_tensor = torch.zeros(20855, dtype=torch.long)
+y_test_negative_tensor = torch.zeros(18056, dtype=torch.long)
 print("y_test_negative_tensor: ", y_test_negative_tensor.size())
 
 # read test positive 5944
@@ -127,7 +125,7 @@ print("y_test: ", y_test.size())
 
 # %%
 # Visualize
-plt.imshow(x_train[43399, :].reshape(64, 32), cmap="gray")
+plt.imshow(x_train[45001, :].reshape(64, 32), cmap="gray")
 
 # %%
 
@@ -149,13 +147,13 @@ testloader = torch.utils.data.DataLoader(
 # %%
 
 
-def conv3x3(in_planes, out_planes, stride=1):
-    return nn.Conv2d(in_planes, out_planes, kernel_size=3, stride=stride, padding=1, bias=False)
+def conv3x3(in_planes, out_planes, stride = 1):
+    return nn.Conv2d(in_planes, out_planes, kernel_size = 3, stride = stride, padding = 1, bias = False)
     # 3x3 olduğu için kernelsize'da 3, padding yapma amacımız inputtaki boyutunu koruması için, batch norm yapacağımız için bias'a gerek yok
 
 
-def conv1x1(in_planes, out_planes, stride=1):
-    return nn.Conv2d(in_planes, out_planes, kernel_size=1, stride=stride, bias=False)
+def conv1x1(in_planes, out_planes, stride = 1):
+    return nn.Conv2d(in_planes, out_planes, kernel_size = 1, stride = stride, bias = False)
 
 
 class BasicBlock(nn.Module):
@@ -212,7 +210,7 @@ class ResNet(nn.Module):
         super(ResNet, self).__init__()
 
         self.inplanes = 64
-        self.conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3)
+        self.conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
         self.bn1 = nn.BatchNorm2d(64)
         self.relu = nn.ReLU(inplace=True)
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
@@ -301,84 +299,78 @@ criterion = nn.CrossEntropyLoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
 # %%
-
 # Train
+
 loss_list = []
 train_acc = []
 test_acc = []
-
 use_gpu = True
 
 total_step = len(trainloader)
 
 for epoch in range(num_epochs):
-    for i, (images, labels) in tqdm(enumerate(trainloader), desc="Training loop"):
-
-        images = images.view(batch_size, 1, 64, 32)
+    for i, (images, labels) in enumerate(trainloader):
+        
+        images = images.view(batch_size,1,64,32)
         images = images.float()
-
+        
         # gpu
-
         if use_gpu:
             if torch.cuda.is_available():
                 images, labels = images.to(device), labels.to(device)
-
+            
         outputs = model(images)
-
+        
         loss = criterion(outputs, labels)
-
+        
         # backward and optimization
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
-
-        print(f"Epoch {epoch+1}/{num_epochs}")
+        
+        if i % 2 == 0:
+            print("epoch: {} {}/{}".format(epoch,i,total_step))
 
     # train
-
-    correct_train = 0
-    total_train = 0
-
+    correct = 0
+    total = 0
     with torch.no_grad():
         for data in trainloader:
             images, labels = data
-            images = images.view(batch_size, 1, 64, 32)
+            images = images.view(batch_size,1,64,32)
             images = images.float()
-
+            
+            # gpu
             if use_gpu:
                 if torch.cuda.is_available():
                     images, labels = images.to(device), labels.to(device)
-
+                    
             outputs = model(images)
-            _, predicted = torch.max(outputs.data, 1)
-            total_train += labels.size(0)
-            correct_train += (predicted == labels).sum().item()
-
-        train_accuracy = 100 * correct_train / total_train
-        print("Train Accuracy: {}%".format(train_accuracy))
-        train_acc.append(train_accuracy)
+            _, predicted = torch.max(outputs.data,1)
+            total += labels.size(0)
+            correct += (predicted == labels).sum().item()
+    print("Accuracy train %d %%"%(100*correct/total))
+    train_acc.append(100*correct/total)
 
     # test
-    correct_test = 0
-    total_test = 0
-
+    correct = 0
+    total = 0
     with torch.no_grad():
         for data in testloader:
             images, labels = data
-            images = images.view(batch_size, 1, 64, 32)
+            images = images.view(batch_size,1,64,32)
             images = images.float()
-
+            
+            # gpu
             if use_gpu:
                 if torch.cuda.is_available():
                     images, labels = images.to(device), labels.to(device)
-
+                    
             outputs = model(images)
-            _, predicted = torch.max(outputs.data, 1)
-            total_test += labels.size(0)
-            correct_test += (predicted == labels).sum().item()
-
-        test_accuracy = 100 * correct_test / total_test
-        print("Test Accuracy: {}%".format(test_accuracy))
-        test_acc.append(test_accuracy)
+            _, predicted = torch.max(outputs.data,1)
+            total += labels.size(0)
+            correct += (predicted == labels).sum().item()
+    print("Accuracy test %d %%"%(100*correct/total))
+    train_acc.append(100*correct/total)
 
     loss_list.append(loss.item())
